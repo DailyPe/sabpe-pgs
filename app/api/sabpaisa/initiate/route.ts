@@ -31,8 +31,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Build callback URL - use prod.sabpe.com for production
-        const callbackUrl = 'https://education.sabpe.com';
+        // Build callback URL - SabPaisa will redirect user here after payment
+        const callbackUrl = 'https://prod.sabpe.com/api/sabpaisa/return';
 
         // Call Lambda function for payment initiation (encryption happens in Lambda with static IP)
         const lambdaResponse = await fetch(LAMBDA_ENDPOINT, {

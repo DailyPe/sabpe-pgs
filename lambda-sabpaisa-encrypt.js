@@ -192,10 +192,10 @@ exports.handler = async (event) => {
         const clientTxnId = `SP_${timestamp}_${random}`;
 
         // Build callback URL
-        // Priority: 1) From request, 2) Environment variable, 3) Default to prod.sabpe.com
+        // Priority: 1) From request, 2) Environment variable, 3) Default to prod.sabpe.com return endpoint
         const callbackUrl = requestCallbackUrl ||
             process.env.SABPAISA_CALLBACK_URL ||
-            'https://prod.sabpe.com';
+            'https://prod.sabpe.com/api/sabpaisa/return';
 
         // Log the callback URL being used (for debugging whitelist issues)
         console.log('Callback URL being sent to SabPaisa:', callbackUrl);
