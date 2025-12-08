@@ -8,16 +8,28 @@ type PaymentStatus = 'success' | 'failure';
 function normalizeStatus(raw: string | null | undefined): PaymentStatus | null {
     if (!raw) return null;
     const value = raw.toString().toUpperCase();
-    const successValues = ['SUCCESS', 'COMPLETED', 'APPROVED', 'CONFIRMED', 'AUTHORIZED', 'AUTHORISED'];
+
+    // Success statuses (matching actual Unlimit response format)
+    const successValues = [
+        'COMPLETED',  // Primary success status from Unlimit
+        'SUCCESS',
+        'APPROVED',
+        'CONFIRMED',
+        'AUTHORIZED',
+        'AUTHORISED',
+    ];
+
+    // Failure statuses
     const failureValues = [
+        'DECLINED',
         'FAIL',
         'FAILED',
-        'DECLINED',
         'ERROR',
         'CANCELLED',
         'CANCELED',
         'REFUSED',
         'TIMEOUT',
+        'REJECTED',
     ];
 
     if (successValues.includes(value)) return 'success';

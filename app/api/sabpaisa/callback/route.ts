@@ -114,17 +114,23 @@ function parseDecryptedData(text: string): Record<string, string> {
 export async function POST(request: NextRequest) {
     try {
         // Get encrypted response from SabPaisa
-        const formData = await request.formData().catch(async () => {
-            // Try JSON body if form data fails
-            const json = await request.json().catch(() => ({}));
-            return json as Record<string, string>;
-        });
+        let encResponse: string | null = null;
 
-        const encResponse =
-            (formData.get('encResponse') as string | null) ||
-            (formData as Record<string, string>).encResponse ||
-            (formData as Record<string, string>).ENCDATA ||
-            null;
+        try {
+            // Try form data first (SabPaisa typically sends form-encoded)
+            const formData = await request.formData();
+            encResponse =
+                (formData.get('encResponse') as string | null) ||
+                (formData.get('ENCDATA') as string | null);
+        } catch {
+            // If form data fails, try JSON body
+            try {
+                const json = (await request.json()) as Record<string, string>;
+                encResponse = json.encResponse || json.ENCDATA || null;
+            } catch {
+                // If both fail, encResponse remains null
+            }
+        }
 
         if (!encResponse) {
             return NextResponse.json(
@@ -186,15 +192,13 @@ export async function POST(request: NextRequest) {
 
         // Determine payment status
         let status: 'success' | 'failure' = 'failure';
-        const statusText = (
+        const statusText = String(
             parsed.status ||
             parsed.STATUS ||
             parsed.responseMessage ||
             parsed.RESPONSE_MESSAGE ||
             '',
-        )
-            .toString()
-            .toUpperCase();
+        ).toUpperCase();
 
         if (
             statusText.includes('SUCCESS') ||

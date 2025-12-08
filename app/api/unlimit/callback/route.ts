@@ -30,9 +30,35 @@ export async function POST(request: NextRequest) {
         const paymentData = body.payment_data ?? {};
         const rawStatus = (paymentData.status ?? '').toString().toUpperCase();
 
+        // Determine payment status based on actual Unlimit response format
+        // Success: COMPLETED, APPROVED, CONFIRMED, AUTHORIZED, AUTHORISED
+        // Failure: DECLINED, FAILED, CANCELLED, ERROR, etc.
         let status: 'success' | 'failure' = 'failure';
-        if (['COMPLETED', 'APPROVED', 'CONFIRMED', 'AUTHORIZED'].includes(rawStatus)) {
+        const successStatuses = [
+            'COMPLETED',
+            'APPROVED',
+            'CONFIRMED',
+            'AUTHORIZED',
+            'AUTHORISED',
+        ];
+        const failureStatuses = [
+            'DECLINED',
+            'FAILED',
+            'FAIL',
+            'CANCELLED',
+            'CANCELED',
+            'ERROR',
+            'REFUSED',
+            'TIMEOUT',
+        ];
+
+        if (successStatuses.includes(rawStatus)) {
             status = 'success';
+        } else if (failureStatuses.includes(rawStatus)) {
+            status = 'failure';
+        } else if (rawStatus) {
+            // If status exists but not in known lists, default to failure
+            status = 'failure';
         }
 
         const orderId =
@@ -40,16 +66,26 @@ export async function POST(request: NextRequest) {
             paymentData.id ??
             `unlimit_${Date.now().toString(36)}`;
 
+        // Save all fields to Firestore (matching the structure shown in user's data)
         await setDoc(doc(collection(db, 'payments'), orderId), {
             gateway: 'unlimit',
             status,
             orderId,
             receivedAt: serverTimestamp(),
+            // Top-level fields for easy querying
             payment_method: body.payment_method ?? null,
             merchant_order: body.merchant_order ?? null,
             customer: body.customer ?? null,
             payment_data: paymentData,
             card_account: body.card_account ?? null,
+            // Additional fields from payment_data for easy access
+            amount: paymentData.amount ?? null,
+            currency: paymentData.currency ?? null,
+            payment_status: paymentData.status ?? null,
+            payment_id: paymentData.id ?? null,
+            rrn: paymentData.rrn ?? null,
+            auth_code: paymentData.auth_code ?? null,
+            // Full raw response
             raw: body,
         });
 
