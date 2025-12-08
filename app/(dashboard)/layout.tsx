@@ -13,7 +13,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <header className="border-b border-slate-100 bg-white/70 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
                 <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
                     <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                        ClickPe · Payment Dashboard
+                        Payment Dashboard
                     </span>
                     <span className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
                         Multi-Gateway Control Center

@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
             },
             merchant_order: {
                 id: orderId,
-                description: `UI Order ("${requestName}")`,
+                description: `UI Order ${requestName}`,
             },
             payment_method: 'BANKCARD',
             payment_data: {

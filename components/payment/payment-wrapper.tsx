@@ -46,7 +46,7 @@ export function PaymentWrapper({ gateway, utility, mode }: PaymentWrapperProps) 
                         currency: 'INR',
                         customer_email: undefined,
                         description: `${utility.toUpperCase()} payment via Unlimit (ID: ${generatedCustomerId})`,
-                        request_name: `ClickPe ${utility} payment`,
+                        request_name: `${utility} payment`,
                         utility,
                     }),
                 });

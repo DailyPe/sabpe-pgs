@@ -1,11 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { useState } from 'react';
 
-import { submitPaymentForm } from 'sabpaisa-pg-dev';
-
-import { db } from '../../lib/firebase/client';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 
@@ -15,41 +11,11 @@ interface SabPaisaTerminalPaymentProps {
     mode: 'uat' | 'prod';
 }
 
-interface SabPaisaTerminalConfig {
-    name: string;
-    clientCode: string;
-    transUserName: string;
-    transUserPassword: string;
-    authKey: string;
-    authIV: string;
-    channelId?: string;
-    url?: string;
-}
-
-interface SabPaisaFormData {
-    clientCode: string;
-    transUserName: string;
-    transUserPassword: string;
-    authKey: string;
-    authIV: string;
-    callbackUrl: string;
-    clientTxnId: string;
-    payerName: string;
-    payerEmail: string;
-    payerMobile: string;
-    amount: string;
-    channelId: string;
-    url: string;
-}
-
 export function SabPaisaTerminalPayment({
     gatewayId,
     utilityId,
     mode,
 }: SabPaisaTerminalPaymentProps) {
-    const [terminals, setTerminals] = useState<SabPaisaTerminalConfig[]>([]);
-    const [terminal, setTerminal] = useState<SabPaisaTerminalConfig | null>(null);
-    const [loadingConfig, setLoadingConfig] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const [amount, setAmount] = useState<string>('');
@@ -58,73 +24,8 @@ export function SabPaisaTerminalPayment({
     const [payerMobile, setPayerMobile] = useState<string>('');
     const [submitting, setSubmitting] = useState(false);
 
-    useEffect(() => {
-        async function loadConfig() {
-            try {
-                const q = query(
-                    collection(db, 'gateways', gatewayId, 'terminals'),
-                    where('utilityId', '==', utilityId),
-                );
-                const snap = await getDocs(q);
-
-                if (snap.empty) {
-                    setError('No SabPaisa terminal configuration found for this service.');
-                    return;
-                }
-                const loaded: SabPaisaTerminalConfig[] = [];
-
-                snap.forEach((docSnap) => {
-                    const data = docSnap.data() as Partial<SabPaisaTerminalConfig>;
-
-                    if (
-                        !data.clientCode ||
-                        !data.transUserName ||
-                        !data.transUserPassword ||
-                        !data.authKey ||
-                        !data.authIV
-                    ) {
-                        console.warn(
-                            'Skipping SabPaisa terminal with incomplete config:',
-                            docSnap.id,
-                        );
-                        return;
-                    }
-
-                    loaded.push({
-                        name: docSnap.id,
-                        clientCode: data.clientCode,
-                        transUserName: data.transUserName,
-                        transUserPassword: data.transUserPassword,
-                        authKey: data.authKey,
-                        authIV: data.authIV,
-                        channelId: data.channelId,
-                        url: data.url,
-                    });
-                });
-
-                if (loaded.length === 0) {
-                    setError(
-                        'No SabPaisa terminals with complete configuration found for this service.',
-                    );
-                    return;
-                }
-
-                setTerminals(loaded);
-                setTerminal(loaded[0]);
-            } catch (err) {
-                console.error('Failed to load SabPaisa terminal config', err);
-                setError('Failed to load terminal configuration.');
-            } finally {
-                setLoadingConfig(false);
-            }
-        }
-
-        void loadConfig();
-    }, [gatewayId, utilityId]);
-
-    const handleSubmit = (event: React.FormEvent) => {
+    const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!terminal) return;
 
         const amountString = amount.trim();
 
@@ -147,81 +48,67 @@ export function SabPaisaTerminalPayment({
 
         setSubmitting(true);
         setError(null);
+
         try {
-            const origin =
-                typeof window !== 'undefined' ? window.location.origin : '';
-
-            // TODO: Point this to a dedicated SabPaisa result page when you
-            // want to parse and show detailed transaction status.
-            const callbackUrl = origin
-                ? `${origin}/payment/result`
-                : 'https://sabpe.com/payment/result';
-
-            const clientTxnId = `SP_${Date.now().toString(36).toUpperCase()}`;
-
-            const finalFormData: SabPaisaFormData = {
-                clientCode: terminal.clientCode,
-                transUserName: terminal.transUserName,
-                transUserPassword: terminal.transUserPassword,
-                authKey: terminal.authKey,
-                authIV: terminal.authIV,
-                callbackUrl,
-                clientTxnId,
-                payerName: payerName.trim(),
-                payerEmail: payerEmail.trim(),
-                payerMobile: payerMobile.trim(),
-                amount: amountString,
-                channelId: terminal.channelId ?? 'npm',
-                url:
-                    terminal.url ??
-                    'https://secure.sabpaisa.in/SabPaisa/sabPaisaInit?v=1',
-            };
-
-            void submitPaymentForm({
-                ...finalFormData,
-                env,
+            // Call server-side API to initiate payment (encryption happens on server)
+            const response = await fetch('/api/sabpaisa/initiate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    amount: amountString,
+                    payerName: payerName.trim(),
+                    payerEmail: payerEmail.trim(),
+                    payerMobile: payerMobile.trim(),
+                    utilityId,
+                }),
             });
+
+            const json = await response.json().catch(() => ({}));
+
+            if (!response.ok || !json.success) {
+                setError(
+                    json.error ??
+                    'Failed to initiate SabPaisa payment. Please try again.',
+                );
+                setSubmitting(false);
+                return;
+            }
+
+            const { encData, clientCode, paymentUrl } = json.data;
+
+            // Create and submit form to SabPaisa
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = paymentUrl;
+            form.target = '_blank';
+
+            const encDataInput = document.createElement('input');
+            encDataInput.type = 'hidden';
+            encDataInput.name = 'encData';
+            encDataInput.value = encData;
+            form.appendChild(encDataInput);
+
+            const clientCodeInput = document.createElement('input');
+            clientCodeInput.type = 'hidden';
+            clientCodeInput.name = 'clientCode';
+            clientCodeInput.value = clientCode;
+            form.appendChild(clientCodeInput);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
         } catch (err) {
             console.error('Failed to initiate SabPaisa payment', err);
-            setError(
-                'Failed to initiate SabPaisa payment. Please verify that authKey and authIV are exactly as provided by SabPaisa (base64 AES key and IV).',
-            );
-        } finally {
+            setError('Failed to initiate payment. Please try again.');
             setSubmitting(false);
         }
     };
-    // Always use SabPaisa production endpoint for this dashboard.
-    const env: 'prod' = 'prod';
 
     return (
         <Card className="max-w-xl">
             <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
                 SabPaisa Payment
             </h2>
-            {terminals.length > 0 && (
-                <div className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                    <p className="font-medium text-slate-700 dark:text-slate-200">
-                        Available terminals ({terminals.length}):
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                        {terminals.map((t) => (
-                            <span
-                                key={t.name}
-                                className={`rounded-full border px-3 py-1 text-xs ${terminal?.name === t.name
-                                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-900/40 dark:text-blue-200'
-                                        : 'border-slate-300 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-                                    }`}
-                            >
-                                {t.name}
-                            </span>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {loadingConfig && (
-                <p className="mt-4 text-sm text-slate-500">Loading terminal…</p>
-            )}
 
             {error && (
                 <p className="mt-4 text-sm text-red-500" aria-live="polite">
@@ -229,7 +116,7 @@ export function SabPaisaTerminalPayment({
                 </p>
             )}
 
-            {!loadingConfig && terminal && !error && (
+            {!error && (
                 <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                     <div>
                         <label
